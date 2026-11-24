@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trabalho Integrador — Redes Neurais com Flask</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f4f6f9;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            color: #333;
+        }
+        .navbar-brand {
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+        .card {
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            margin-bottom: 24px;
+        }
+        .card-header {
+            background-color: #ffffff;
+            border-bottom: 1px solid #edf2f7;
+            font-weight: 600;
+            border-top-left-radius: 10px !important;
+            border-top-right-radius: 10px !important;
+            padding: 14px 20px;
+        }
+        .metric-card {
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+            border-left: 4px solid #0d6efd;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+        }
+        .metric-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-top: 4px;
+        }
+        .metric-label {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #6c757d;
+        }
+        .table-mono td, .table-mono th {
+            font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+            text-align: right;
+            font-size: 0.9rem;
+        }
+        .table-mono th:first-child, .table-mono td:first-child {
+            text-align: left;
+        }
+        .img-grafico {
+            max-width: 100%;
+            height: auto;
+            border-radius: 6px;
+            border: 1px solid #e9ecef;
+        }
+        #loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 255, 255, 0.85);
+            z-index: 9999;
+            text-align: center;
+            padding-top: 20%;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Overlay de Treinamento -->
+    <div id="loading-overlay">
+        <div class="spinner-border text-primary" style="width: 3.5rem; height: 3.5rem;" role="status"></div>
+        <h4 class="mt-3 text-dark fw-bold">Treinando modelo neural...</h4>
+        <p class="text-secondary">Processando épocas e calculando histórico de pesos e bias. Aguarde.</p>
+    </div>
+
+    <!-- Barra de Navegação -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 shadow-sm">
+        <div class="container">
+            <span class="navbar-brand">
+                🧠 Trabalho Integrador: Redes Neurais em Flask
+            </span>
+            <span class="navbar-text text-light small d-none d-md-inline">
+                Aprendizado de Máquina (PEPAPRM) • Perceptron, MLP e CNN
+            </span>
+        </div>
+    </nav>
+
+    <div class="container pb-5">
+
+        <!-- Mensagem de Erro (RF12) -->
+        {% if erro %}
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
+            <h5 class="alert-heading fw-bold mb-1">⚠️ Erro na Execução</h5>
+            <p class="mb-0">{{ erro }}</p>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endif %}
+
+        <!-- Formulário de Configuração -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>⚙️ Configuração do Treinamento</span>
+                <span class="badge bg-primary">RF1 a RF6</span>
+            </div>
+            <div class="card-body p-4">
+                <form id="form-treino" method="POST" action="/" enctype="multipart/form-data">
+                    <div class="row g-3">
+                        
+                        <!-- RF1: Escolha do Modelo -->
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">1. Modelo Neural</label>
+                            <select name="modelo" id="select-modelo" class="form-select" onchange="atualizarInterface()">
+                                <option value="perceptron" {% if valores.modelo == 'perceptron' %}selected{% endif %}>Perceptron (NumPy Puro)</option>
+                                <option value="mlp" {% if valores.modelo == 'mlp' %}selected{% endif %}>MLP (Camadas Ocultas)</option>
+                                <option value="cnn" {% if valores.modelo == 'cnn' %}selected{% endif %}>CNN (Convolucional)</option>
+                            </select>
+                        </div>
+
+                        <!-- RF2: Escolha da Base de Dados -->
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">2. Base de Dados</label>
+                            <select name="base" id="select-base" class="form-select" onchange="atualizarInterface()">
+                                <option value="iris" {% if valores.base == 'iris' %}selected{% endif %}>Iris (Tabular, 3 classes)</option>
+                                <option value="cancer" {% if valores.base == 'cancer' %}selected{% endif %}>Câncer de Mama (Tabular, 2 classes)</option>
+                                <option value="digits" {% if valores.base == 'digits' %}selected{% endif %}>Dígitos 8x8 (Imagem, 10 classes)</option>
+                                <option value="alunos" {% if valores.base == 'alunos' %}selected{% endif %}>Alunos (CSV da pasta, 2 classes)</option>
+                                <option value="grupo" {% if valores.base == 'grupo' %}selected{% endif %}>Grupo de Clientes (CSV da pasta, 2 classes)</option>
+                                <option value="upload" {% if valores.base == 'upload' %}selected{% endif %}>📁 Upload CSV (Base Exclusiva)</option>
+                            </select>
+                        </div>
+
+                        <!-- RF3: Função de Ativação -->
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">3. Função de Ativação</label>
+                            <select name="ativacao" id="select-ativacao" class="form-select">
+                                <option value="sigmoide" {% if valores.ativacao == 'sigmoide' %}selected{% endif %}>Sigmoide (Regra Delta / Soft)</option>
+                                <option value="tanh" {% if valores.ativacao == 'tanh' %}selected{% endif %}>Tangente Hiperbólica (tanh)</option>
+                                <option value="relu" {% if valores.ativacao == 'relu' %}selected{% endif %}>ReLU (Linear Retificada)</option>
+                                <option value="leaky_relu" {% if valores.ativacao == 'leaky_relu' %}selected{% endif %}>Leaky ReLU</option>
+                                <option value="degrau" id="opt-degrau" {% if valores.ativacao == 'degrau' %}selected{% endif %}>Degrau (Apenas Perceptron)</option>
+                            </select>
+                            <div class="form-text" id="help-ativacao">Degrau disponível apenas para Perceptron.</div>
+                        </div>
+
+                        <!-- Campo de Upload Condicional -->
+                        <div class="col-12" id="div-upload" style="display: none;">
+                            <div class="p-3 bg-light rounded border">
+                                <label class="form-label fw-bold">Arquivo CSV da Base Exclusiva:</label>
+                                <input type="file" name="arquivo_upload" class="form-control" accept=".csv">
+                                <small class="text-muted">A última coluna deve ser a classe; as demais devem ser atributos numéricos.</small>
+                            </div>
+                        </div>
+
+                        <!-- Hiperparâmetros Gerais (RF4) -->
+                        <div class="col-md-12"><hr class="my-2"></div>
+                        <h6 class="fw-bold text-secondary mb-0">Hiperparâmetros de Treinamento</h6>
+
+                        <div class="col-md-2 col-6">
+                            <label class="form-label small fw-bold">Taxa Aprendizado (&eta;)</label>
+                            <input type="number" step="0.001" min="0.0001" max="5.0" name="taxa" class="form-control" value="{{ valores.taxa }}">
+                        </div>
+
+                        <div class="col-md-2 col-6">
+                            <label class="form-label small fw-bold">Épocas</label>
+                            <input type="number" step="1" min="1" max="200" id="input-epocas" name="epocas" class="form-control" value="{{ valores.epocas }}">
+                        </div>
+
+                        <div class="col-md-2 col-6">
+                            <label class="form-label small fw-bold">Tamanho do Lote</label>
+                            <input type="number" step="1" min="1" max="256" name="lote" class="form-control" value="{{ valores.lote }}">
+                        </div>
+
+                        <div class="col-md-3 col-6">
+                            <label class="form-label small fw-bold">Divisão Teste (Ex: 0.25)</label>
+                            <input type="number" step="0.05" min="0.1" max="0.5" name="prop_teste" class="form-control" value="{{ valores.prop_teste }}">
+                        </div>
+
+                        <div class="col-md-3 col-12">
+                            <label class="form-label small fw-bold">Semente Aleatória</label>
+                            <input type="number" step="1" name="semente" class="form-control" value="{{ valores.semente }}">
+                        </div>
+
+                        <!-- Parâmetros Específicos do Modelo -->
+                        <!-- Perceptron: Atributos para Fronteira 2D (RF10) -->
+                        <div class="col-12 campo-especifico" id="div-perceptron">
+                            <div class="p-3 bg-light rounded border">
+                                <div class="row g-2 align-items-center">
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-bold mb-0">Fronteira 2D — Índice do Atributo X (Eixo Horizontal):</label>
+                                        <input type="number" min="0" max="63" name="feat_x" class="form-control form-control-sm" value="{{ valores.feat_x }}">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-bold mb-0">Fronteira 2D — Índice do Atributo Y (Eixo Vertical):</label>
+                                        <input type="number" min="0" max="63" name="feat_y" class="form-control form-control-sm" value="{{ valores.feat_y }}">
+                                    </div>
+                                </div>
+                                <small class="text-muted">A aplicação desenhará as retas nas épocas 0, 1, 5 e final sobre os pontos de treino.</small>
+                            </div>
+                        </div>
+
+                        <!-- MLP: Camadas Ocultas (RF4) -->
+                        <div class="col-12 campo-especifico" id="div-mlp" style="display: none;">
+                            <div class="p-3 bg-light rounded border">
+                                <label class="form-label small fw-bold">Neurônios por Camada Oculta (separados por vírgula):</label>
+                                <input type="text" name="camadas_ocultas" class="form-control form-control-sm" placeholder="Exemplo: 16 ou 16, 8" value="{{ valores.camadas_ocultas }}">
+                                <small class="text-muted">Exemplo: "16" para 1 camada oculta com 16 neurônios; "16, 8" para duas camadas.</small>
+                            </div>
+                        </div>
+
+                        <!-- CNN: Filtros e Kernel (RF4) -->
+                        <div class="col-12 campo-especifico" id="div-cnn" style="display: none;">
+                            <div class="p-3 bg-light rounded border">
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-bold">Número de Filtros:</label>
+                                        <input type="number" min="1" max="32" name="n_filtros" class="form-control form-control-sm" value="{{ valores.n_filtros }}">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-bold">Tamanho do Kernel (KxK):</label>
+                                        <select name="kernel_size" class="form-select form-select-sm">
+                                            <option value="3" {% if valores.kernel_size == '3' %}selected{% endif %}>3x3</option>
+                                            <option value="5" {% if valores.kernel_size == '5' %}selected{% endif %}>5x5</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <small class="text-muted">Dica: use a base Dígitos 8x8 para treinar a CNN.</small>
+                            </div>
+                        </div>
+
+                        <!-- Botão de Treinamento -->
+                        <div class="col-12 text-end mt-4">
+                            <button type="submit" id="btn-treinar" class="btn btn-primary px-4 py-2 fw-bold">
+                                🚀 Iniciar Treinamento
+                            </button>
+                        </div>
+
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Seção de Resultados (RF7, RF8, RF9, RF10, RF11) -->
+        {% if resultado %}
+        <div class="card mt-4">
+            <div class="card-header d-flex justify-content-between align-items-center bg-white">
+                <span class="fs-5 fw-bold">📊 Resultados do Modelo: {{ resultado.modelo }} (Base: {{ resultado.base }})</span>
+                <span class="badge bg-success">Ativação: {{ resultado.ativacao }}</span>
+            </div>
+            <div class="card-body p-4">
+                
+                <!-- Cards de Métricas Principais (RF7) -->
+                <div class="row g-3 mb-4">
+                    <div class="col-md-3 col-6">
+                        <div class="metric-card" style="border-left-color: #0275d8;">
+                            <div class="metric-label">Acurácia Treino</div>
+                            <div class="metric-value text-primary">{{ resultado.acuracia_treino }}%</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <div class="metric-card" style="border-left-color: #5cb85c;">
+                            <div class="metric-label">Acurácia Teste</div>
+                            <div class="metric-value text-success">{{ resultado.acuracia_teste }}%</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <div class="metric-card" style="border-left-color: #d9534f;">
+                            <div class="metric-label">Perda Final</div>
+                            <div class="metric-value text-danger">{{ resultado.perda_final }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <div class="metric-card" style="border-left-color: #6f42c1;">
+                            <div class="metric-label">Modelo Treinado</div>
+                            <div class="metric-value text-purple" style="font-size: 1.4rem; padding-top: 5px;">{{ resultado.modelo }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabela de Ajuste dos Parâmetros (RF9) -->
+                <div class="card mb-4 border">
+                    <div class="card-header py-2 bg-light d-flex justify-content-between align-items-center">
+                        <span class="fw-bold">📋 Ajuste dos Parâmetros do Neurônio 1 ao Longo das Épocas</span>
+                        <span class="badge bg-secondary">RF9 — Pesos e Bias</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover table-mono mb-0 align-middle">
+                                <thead class="table-dark">
+                                    <tr>
+                                        {% for col in resultado.tabela.cabecalho %}
+                                        <th>{{ col }}</th>
+                                        {% endfor %}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for linha in resultado.tabela.linhas %}
+                                    <tr>
+                                        <td class="fw-bold">{{ linha.epoca }}</td>
+                                        <td>{{ linha.bias }}</td>
+                                        {% for p in linha.pesos %}
+                                        <td>{{ p }}</td>
+                                        {% endfor %}
+                                    </tr>
+                                    {% endfor %}
+                                    <!-- Linha Delta Total -->
+                                    <tr class="table-warning fw-bold">
+                                        <td>{{ resultado.tabela.delta.epoca }}</td>
+                                        <td>{{ resultado.tabela.delta.bias }}</td>
+                                        {% for dp in resultado.tabela.delta.pesos %}
+                                        <td>{{ dp }}</td>
+                                        {% endfor %}
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Grade de Gráficos (RF7, RF8, RF9, RF10, RF11) -->
+                <div class="row g-4">
+                    
+                    <!-- Gráfico 1: Perda e Acurácia por Época (RF8) -->
+                    <div class="col-lg-6">
+                        <div class="card h-100 border">
+                            <div class="card-header py-2 bg-light fw-bold">📈 Gráfico de Perda e Acurácia por Época</div>
+                            <div class="card-body text-center p-2">
+                                <img src="{{ resultado.grafico_perda_acc }}" class="img-grafico" alt="Perda e Acurácia">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Gráfico 2: Evolução dos Parâmetros (RF9) -->
+                    <div class="col-lg-6">
+                        <div class="card h-100 border">
+                            <div class="card-header py-2 bg-light fw-bold">📉 Trajetória dos Pesos e Bias ao Longo das Épocas</div>
+                            <div class="card-body text-center p-2">
+                                <img src="{{ resultado.grafico_params }}" class="img-grafico" alt="Trajetória dos Pesos">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Gráfico 3: Norma da Variação dos Pesos (RF9) -->
+                    <div class="col-lg-6">
+                        <div class="card h-100 border">
+                            <div class="card-header py-2 bg-light fw-bold">📐 Norma da Variação dos Pesos (||ΔW||) por Época</div>
+                            <div class="card-body text-center p-2">
+                                <img src="{{ resultado.grafico_norma }}" class="img-grafico" alt="Norma da Variação">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Gráfico 4: Matriz de Confusão do Teste (RF7) -->
+                    <div class="col-lg-6">
+                        <div class="card h-100 border">
+                            <div class="card-header py-2 bg-light fw-bold">🎯 Matriz de Confusão (Conjunto de Teste)</div>
+                            <div class="card-body text-center p-2">
+                                <img src="{{ resultado.grafico_cm }}" class="img-grafico" alt="Matriz de Confusão">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Gráfico 5: Específico (RF10 Fronteira ou RF11 Filtros ou Heatmap MLP) -->
+                    {% if resultado.grafico_extra %}
+                    <div class="col-12">
+                        <div class="card border">
+                            <div class="card-header py-2 bg-light fw-bold">🔍 {{ resultado.titulo_grafico_extra }}</div>
+                            <div class="card-body text-center p-3">
+                                <img src="{{ resultado.grafico_extra }}" class="img-grafico" alt="Visualização Específica">
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                </div>
+
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+
+    <!-- Scripts Bootstrap e Lógica da Interface -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function atualizarInterface() {
+            const modelo = document.getElementById("select-modelo").value;
+            const base = document.getElementById("select-base").value;
+            const divUpload = document.getElementById("div-upload");
+            const optDegrau = document.getElementById("opt-degrau");
+            const selectAtivacao = document.getElementById("select-ativacao");
+            const helpAtivacao = document.getElementById("help-ativacao");
+            const inputEpocas = document.getElementById("input-epocas");
+
+            // Exibição do campo de upload
+            if (base === "upload") {
+                divUpload.style.display = "block";
+            } else {
+                divUpload.style.display = "none";
+            }
+
+            // Exibição condicional dos campos específicos do modelo
+            document.getElementById("div-perceptron").style.display = (modelo === "perceptron") ? "block" : "none";
+            document.getElementById("div-mlp").style.display = (modelo === "mlp") ? "block" : "none";
+            document.getElementById("div-cnn").style.display = (modelo === "cnn") ? "block" : "none";
+
+            // Regra da ativação degrau (RF3 e RF12)
+            if (modelo !== "perceptron") {
+                optDegrau.disabled = true;
+                if (selectAtivacao.value === "degrau") {
+                    selectAtivacao.value = "relu";
+                }
+                helpAtivacao.innerText = "Degrau desabilitado (derivada nula impede backpropagation em MLP e CNN).";
+                helpAtivacao.className = "form-text text-danger";
+            } else {
+                optDegrau.disabled = false;
+                helpAtivacao.innerText = "Perceptron suporta Degrau, Sigmoide e Tanh.";
+                helpAtivacao.className = "form-text text-muted";
+            }
+
+            // Limite de épocas sugerido
+            if (modelo === "cnn") {
+                inputEpocas.max = 30;
+                if (parseInt(inputEpocas.value) > 30) inputEpocas.value = 20;
+            } else {
+                inputEpocas.max = 200;
+            }
+        }
+
+        // Exibe loading ao submeter o formulário
+        document.getElementById("form-treino").addEventListener("submit", function() {
+            document.getElementById("loading-overlay").style.display = "block";
+            document.getElementById("btn-treinar").disabled = true;
+            document.getElementById("btn-treinar").innerText = "Treinando...";
+        });
+
+        // Inicializa estado ao carregar a página
+        window.addEventListener("DOMContentLoaded", atualizarInterface);
+    </script>
+</body>
+</html>
